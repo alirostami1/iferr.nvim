@@ -5,12 +5,18 @@ local function buf_text(buf)
     return table.concat(lines, "\n")
 end
 
-local function run_iferr()
+local function run_iferr(message)
     local bpos  = vim.fn.wordcount().cursor_bytes
     local buf   = vim.api.nvim_get_current_buf()
     local input = buf_text(buf)
 
-    local out   = vim.fn.systemlist('iferr -pos ' .. tostring(bpos), input)
+    local cmd   = { 'iferr', '-pos', tostring(bpos) }
+    if type(message) == 'string' and message ~= '' then
+        table.insert(cmd, '-message')
+        table.insert(cmd, message)
+    end
+
+    local out = vim.fn.systemlist(cmd, input)
 
     if type(out) ~= 'table' or #out == 1 then
         return
@@ -27,12 +33,13 @@ end
 M.run = run_iferr
 
 --- Setup: creates a buffer-local :IfErr command (and optional keymap) for given filetypes.
---- @param opts table|nil { filetypes={'go'}, cmd_name='IfErr', map=nil }
+--- @param opts table|nil { filetypes={'go'}, cmd_name='IfErr', map=nil, message=nil }
 M.setup = function(opts)
     opts           = opts or {}
     local fts      = opts.filetypes or { 'go' }
     local cmd_name = opts.cmd_name or 'IfErr'
     local map      = opts.map
+    local message  = opts.message
 
     vim.api.nvim_create_autocmd('FileType', {
         pattern = fts,
@@ -40,12 +47,14 @@ M.setup = function(opts)
             vim.api.nvim_buf_create_user_command(
                 args.buf,
                 cmd_name,
-                function() run_iferr() end,
+                function() run_iferr(message) end,
                 { nargs = 0, desc = 'Insert iferr block at cursor' }
             )
 
+
             if map then
-                vim.keymap.set('n', map, run_iferr, { buffer = args.buf, desc = 'iferr: insert error check' })
+                local runner = function() run_iferr(message) end
+                vim.keymap.set('n', map, runner, { buffer = args.buf, desc = 'iferr: insert error check' })
             end
         end,
     })
